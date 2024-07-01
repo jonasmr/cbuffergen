@@ -11,7 +11,7 @@
 			"name": "cbuffer_aprse",
 			"windows":
 			{
-				"file_regex": "(...*?):([0-9]*):([0-9]*):",
+				"file_regex": "File \"(...*?)\", line ([0-9]*)",
 				"shell_cmd": "cbuffergen",
 				"working_dir": "${project_path}"
 			},

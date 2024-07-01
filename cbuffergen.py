@@ -7,7 +7,11 @@ import time
 import shlex
 import json
 import argparse
-
+#
+# TODO
+#  Arrays of user defined stuff
+#  double support
+#  uint16_t support
 
 def MapType(type):
 	type_pattern = r'(float|int|uint)(([1-4])(x([1-4]))?)?';
@@ -50,19 +54,29 @@ class Line:
 		L.name = name
 		if array_ext:
 			print(f" array ext is{array_ext}")
-			L.array_ext = array_ext
+			L.array_ext_full = array_ext[0]
+			L.array_ext_last = array_ext[1]
+			L.array_ext_last_element = array_ext[2]
 			L.is_array = True
 		else:
-			L.array_ext = ""
+			L.array_ext_full = ""
+			L.array_ext_last = None
+			L.array_ext_last_element = None
 			L.is_array = False
+		L.array_ext = L.array_ext_full
+		L.array_ext_cb = L.array_ext_full
+
 		L.hlsl_base_type, L.hlsl_size, L.is_vector, L.is_matrix, L.dim_x, L.dim_y, L.type_align = MapType(type)
 		if L.is_matrix:
 			L.hlsl_type = f"{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
-			L.hlsl_cbarray_type = f"{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cbarray"
+			L.hlsl_cb_type = f"{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cb"
+			L.is_array = True; # matrices are treated as arrays
 		elif L.is_vector:
 			L.hlsl_type = f"{L.hlsl_base_type}{L.dim_x}"
-			#//			struct hlsl_array_cb<T, LEN, ARRAY_SIZE>
-			L.hlsl_cbarray_type = f"hlsl_array_cb<{L.hlsl_base_type}, {L.dim_x},{33}>"
+			L.hlsl_cbarray_type = f"{L.hlsl_base_type}{L.dim_x}"
+			if L.is_array:
+				L.hlsl_cbarray_type = f"hlsl_array_cb<{L.hlsl_base_type}, {L.dim_x}, {L.array_ext_last_element}>"
+				L.array_ext_cb = L.array_ext_full[:-len(L.array_ext_last)]
 		else:
 			L.hlsl_type = f"{L.hlsl_base_type}"
 			L.hlsl_cbarray_type = f"{L.hlsl_base_type}_cbarray"
@@ -80,10 +94,14 @@ class CBufferGen:
 
 		for match in matches:
 			num_groups = len(match.groups());
+			array_ext = None
+			if match.group(4):
+				array_ext = [match.group(3), match.group(4), match.group(5)]
+			print(f"numgroups {num_groups}")
 			for f in match.groups():
 				print(f"yo {f}")
 			#print(f"3:{match.group(3)} 3:{match.group(3)} 4:{match.group(4)} 5:{match.group(5)}")
-			l = Line(match.group(1), match.group(2), match.group(3))
+			l = Line(match.group(1), match.group(2), array_ext)
 			output_lines.append(l)
 		return output_lines
 
@@ -94,7 +112,7 @@ class CBufferGen:
 			pad_type = "hlsl_int"
 			if count > 1:
 				pad_type = f"{pad_type}{count}" 
-			f.write(f"\t{pad_type:<30} _pad{off};\n");
+			f.write(f"\t{pad_type:<40} _pad{off};\n");
 			off += count
 		return off
 
@@ -133,8 +151,8 @@ class CBufferGen:
 					else:
 						if l.hlsl_size > 1 and (offset % 4) + l.hlsl_size > 4:
 							offset = A.Pad(offset, 4, f)
-					name = f"{l.name}{l.array_ext};";
-					f.write(f"\t{output_type:<30} {name} //{offset:<5}\n")
+					name = f"{l.name}{l.array_ext_cb};";
+					f.write(f"\t{output_type:<40} {name} //{offset:<5}\n")
 					offset += l.hlsl_size
 				f.write(f"}}")
 		print(f"done -> {output_file}")
