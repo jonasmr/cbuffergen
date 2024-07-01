@@ -49,6 +49,7 @@ class Line:
 		L.type = type
 		L.name = name
 		if array_ext:
+			print(f" array ext is{array_ext}")
 			L.array_ext = array_ext
 			L.is_array = True
 		else:
@@ -60,7 +61,8 @@ class Line:
 			L.hlsl_cbarray_type = f"{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cbarray"
 		elif L.is_vector:
 			L.hlsl_type = f"{L.hlsl_base_type}{L.dim_x}"
-			L.hlsl_cbarray_type = f"{L.hlsl_base_type}{L.dim_x}_cbarray"
+			#//			struct hlsl_array_cb<T, LEN, ARRAY_SIZE>
+			L.hlsl_cbarray_type = f"hlsl_array_cb<{L.hlsl_base_type}, {L.dim_x},{33}>"
 		else:
 			L.hlsl_type = f"{L.hlsl_base_type}"
 			L.hlsl_cbarray_type = f"{L.hlsl_base_type}_cbarray"
@@ -72,11 +74,15 @@ class CBufferGen:
 		A.parser.add_argument("-i", "--input_path", help="input directory", default=".")
 		A.parser.add_argument("-c", "--c_path", help="directory for generated header c file", default=".")
 	def ParseLines(A, lines):
-		line_pattern = r'^[\s](\w+)[\s]*(\w+)((\[[\w]*\])*)';
+		line_pattern = r'^[\s](\w+)[\s]*(\w+)((\[([\w]*)\])*)';
 		matches = re.finditer(line_pattern, lines, re.MULTILINE)
 		output_lines = []
 
 		for match in matches:
+			num_groups = len(match.groups());
+			for f in match.groups():
+				print(f"yo {f}")
+			#print(f"3:{match.group(3)} 3:{match.group(3)} 4:{match.group(4)} 5:{match.group(5)}")
 			l = Line(match.group(1), match.group(2), match.group(3))
 			output_lines.append(l)
 		return output_lines
