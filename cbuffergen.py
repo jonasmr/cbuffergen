@@ -49,37 +49,33 @@ def MapType(type):
 	return type_name, size, is_vector, is_matrix, dim_x, dim_y, type_align
 
 class Line:
-	def __init__(L, type, name, array_ext):
+	def __init__(L, type, name, array_size, array_ext):
 		L.type = type
 		L.name = name
-		if array_ext:
+		L.array_size = array_size
+		if array_size:
 			print(f" array ext is{array_ext}")
-			L.array_ext_full = array_ext[0]
-			L.array_ext_last = array_ext[1]
-			L.array_ext_last_element = array_ext[2]
-			L.is_array = True
+			L.array_ext = f"[{array_ext}]"
+			L.array_ext_cb = ""
 		else:
-			L.array_ext_full = ""
-			L.array_ext_last = None
-			L.array_ext_last_element = None
-			L.is_array = False
-		L.array_ext = L.array_ext_full
-		L.array_ext_cb = L.array_ext_full
+			L.array_ext = ""
+			L.array_ext_cb = ""
 
 		L.hlsl_base_type, L.hlsl_size, L.is_vector, L.is_matrix, L.dim_x, L.dim_y, L.type_align = MapType(type)
 		if L.is_matrix:
 			L.hlsl_type = f"{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
-			L.hlsl_cb_type = f"{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cb"
-			L.is_array = True; # matrices are treated as arrays
+			if array_size:
+				L.hlsl_cb_type = f"hlsl_vec_cb<{L.hlsl_base_type}, {L.dim_x}, {L.dim_y}>"
+			else:
+				L.hlsl_cb_type = f"hlsl_mat_cb<{L.hlsl_base_type}, {L.dim_x}, {L.dim_y}, {L.array_ext}>"
 		elif L.is_vector:
 			L.hlsl_type = f"{L.hlsl_base_type}{L.dim_x}"
-			L.hlsl_cbarray_type = f"{L.hlsl_base_type}{L.dim_x}"
-			if L.is_array:
-				L.hlsl_cbarray_type = f"hlsl_array_cb<{L.hlsl_base_type}, {L.dim_x}, {L.array_ext_last_element}>"
-				L.array_ext_cb = L.array_ext_full[:-len(L.array_ext_last)]
+			L.hlsl_cb_type = f"{L.hlsl_base_type}{L.dim_x}"
+			if L.array_size:
+				L.hlsl_cb_type = f"hlsl_vec_cb<{L.hlsl_base_type}, {L.dim_x}, {L.array_ext}>"
 		else:
 			L.hlsl_type = f"{L.hlsl_base_type}"
-			L.hlsl_cbarray_type = f"{L.hlsl_base_type}_cbarray"
+			L.hlsl_cb_type = f"{L.hlsl_base_type}"
 
 class CBufferGen:
 	def __init__(A):
@@ -95,13 +91,18 @@ class CBufferGen:
 		for match in matches:
 			num_groups = len(match.groups());
 			array_ext = None
+			array_size = 0
 			if match.group(4):
-				array_ext = [match.group(3), match.group(4), match.group(5)]
-			print(f"numgroups {num_groups}")
-			for f in match.groups():
-				print(f"yo {f}")
-			#print(f"3:{match.group(3)} 3:{match.group(3)} 4:{match.group(4)} 5:{match.group(5)}")
-			l = Line(match.group(1), match.group(2), array_ext)
+				if match.group(3) != match.group(4):
+					print(f"multidimensional arrays not supported '{match.group(3)}'")
+					exit(1)
+				array_size = 1
+				array_ext = match.group(5)
+				try:
+					array_size = int(array_ext)
+				except:
+					pass
+			l = Line(match.group(1), match.group(2), array_size, array_ext)
 			output_lines.append(l)
 		return output_lines
 
@@ -143,11 +144,11 @@ class CBufferGen:
 				offset = 0
 				for l in lines:
 					output_type = l.hlsl_type
-					if l.is_array:
+					if l.array_size:
 						#note that for the size of arrays, we just use the plain size, since for alignment purposes each each element can be ignored(since they are all fully aligned)
 						#and additionally its allowed to insert elements after the array. WEIRD SHIT
 						offset = A.Pad(offset, 4, f)
-						output_type = l.hlsl_cbarray_type 
+						output_type = l.hlsl_cb_type 
 					else:
 						if l.hlsl_size > 1 and (offset % 4) + l.hlsl_size > 4:
 							offset = A.Pad(offset, 4, f)
