@@ -17,36 +17,30 @@ def MapType(type):
 	type_pattern = r'(float|int|uint)(([1-4])(x([1-4]))?)?';
 	match = re.match(type_pattern, type)
 	type_name = "?"
-	is_matrix = False
-	is_vector = False
 	type_align = 1
-	dim_x = 1
-	dim_y = 1
+	dim_x = 0
+	dim_y = 0
 	size = 1
+	external = 0
 	if match: 
 		#builtin or array type
-		type_name = f'hlsl_{match.group(1)}'
+		type_name = f'{match.group(1)}'
 		if match.group(5):
-			is_matrix = True
 			dim_x = int(match.group(3))
 			dim_y = int(match.group(5))
-			size = dim_x * dim_y
-			type_align = 4
 		elif match.group(3):
-			is_vector = True
 			dim_x = int(match.group(3))
-			size = dim_x
-			type_align = 4
 
 	else:
 		if type == 'PalDescriptorHandle':
 			type_name = type
 			size = 1
+			external = 1
 		else:
 			print(f"unknown type {type}, exiting\n")
 			exit(1)
 
-	return type_name, size, is_vector, is_matrix, dim_x, dim_y, type_align
+	return type_name, size, dim_x, dim_y
 
 class Line:
 	def __init__(L, type, name, array_size, array_ext):
@@ -54,25 +48,49 @@ class Line:
 		L.name = name
 		L.array_size = array_size
 		if array_size:
-			print(f" array ext is{array_ext}")
 			L.array_ext = f"[{array_ext}]"
-			L.array_ext_cb = ""
+			L.array_ext_cb = f"{array_ext}";
 		else:
 			L.array_ext = ""
 			L.array_ext_cb = ""
 
-		L.hlsl_base_type, L.hlsl_size, L.is_vector, L.is_matrix, L.dim_x, L.dim_y, L.type_align = MapType(type)
+		L.hlsl_base_type, L.hlsl_size, L.dim_x, L.dim_y, L.is_external = MapType(type)
+		if L.dim_y:
+			L.is_matrix = True
+			L.is_vector = False
+		elif L.dim_x:
+			L.is_matrix = False
+			L.is_vector = True
+		else:
+			L.is_matrix = False
+			L.is_vector = False
+
+		L.cb_align = 1
+		if L.is_matrix:
+			l.cb_align = 4
+			if L.array_size:
+				padded_mat_size = L.hlsl_size * 4 * L.dim_y
+				last_mat_size = L.hlsl_size * (4 * (L.dim_y-1) + dim_y)
+				L.cb_size = padded_mat_size * (L.array_size-1) + last_mat_size
+			else:
+				L.cb_size = L.hlsl_size * (4 * (L.dim_y-1) + dim_y)
+		elif L.is_vector:
+		else:
+			L.cb_size = 
+
+
 		if L.is_matrix:
 			L.hlsl_type = f"{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
 			if array_size:
-				L.hlsl_cb_type = f"hlsl_vec_cb<{L.hlsl_base_type}, {L.dim_x}, {L.dim_y}>"
+				L.hlsl_cb_type = f"hlsl_mat_cb<{L.hlsl_base_type}, {L.dim_x}, {L.dim_y}, {L.array_ext_cb}>"				
 			else:
-				L.hlsl_cb_type = f"hlsl_mat_cb<{L.hlsl_base_type}, {L.dim_x}, {L.dim_y}, {L.array_ext}>"
+				L.hlsl_cb_type = f"hlsl_vec_cb<{L.hlsl_base_type}, {L.dim_x}, {L.dim_y}>"
+				
 		elif L.is_vector:
 			L.hlsl_type = f"{L.hlsl_base_type}{L.dim_x}"
 			L.hlsl_cb_type = f"{L.hlsl_base_type}{L.dim_x}"
 			if L.array_size:
-				L.hlsl_cb_type = f"hlsl_vec_cb<{L.hlsl_base_type}, {L.dim_x}, {L.array_ext}>"
+				L.hlsl_cb_type = f"hlsl_vec_cb<{L.hlsl_base_type}, {L.dim_x}, {L.array_ext_cb}>"
 		else:
 			L.hlsl_type = f"{L.hlsl_base_type}"
 			L.hlsl_cb_type = f"{L.hlsl_base_type}"
@@ -152,7 +170,7 @@ class CBufferGen:
 					else:
 						if l.hlsl_size > 1 and (offset % 4) + l.hlsl_size > 4:
 							offset = A.Pad(offset, 4, f)
-					name = f"{l.name}{l.array_ext_cb};";
+					name = f"{l.name};";
 					f.write(f"\t{output_type:<40} {name} //{offset:<5}\n")
 					offset += l.hlsl_size
 				f.write(f"}}")
