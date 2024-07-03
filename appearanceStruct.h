@@ -5,6 +5,8 @@
 struct funk
 {
 	float shininessxx[2];
+	uint fisk;
+	float1 hah;
 	float2 hest[7];
 	float2x4 fisk;
 	uint inside;

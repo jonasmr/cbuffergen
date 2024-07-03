@@ -9,7 +9,7 @@ import json
 import argparse
 #
 # TODO
-#  Arrays of user defined stuff
+#  User defined types are assumed to be 4 bytes, and arrays of them are not supported
 #  double support
 #  uint16_t support
 
@@ -30,6 +30,9 @@ def MapType(type):
 			dim_y = int(match.group(5))
 		elif match.group(3):
 			dim_x = int(match.group(3))
+		else:
+			dim_x = 1
+
 
 	else:
 		if type == 'PalDescriptorHandle':
@@ -40,7 +43,7 @@ def MapType(type):
 			print(f"unknown type {type}, exiting\n")
 			exit(1)
 
-	return type_name, size, dim_x, dim_y
+	return type_name, size, dim_x, dim_y, external
 
 class Line:
 	def __init__(L, type, name, array_size, array_ext):
@@ -58,7 +61,7 @@ class Line:
 		if L.dim_y:
 			L.is_matrix = True
 			L.is_vector = False
-		elif L.dim_x:
+		elif not L.is_external:
 			L.is_matrix = False
 			L.is_vector = True
 		else:
@@ -67,30 +70,39 @@ class Line:
 
 		L.cb_align = 1
 		if L.is_matrix:
-			l.cb_align = 4
+			L.cb_align = 4
 			if L.array_size:
 				padded_mat_size = L.hlsl_size * 4 * L.dim_y
-				last_mat_size = L.hlsl_size * (4 * (L.dim_y-1) + dim_y)
+				last_mat_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
 				L.cb_size = padded_mat_size * (L.array_size-1) + last_mat_size
 			else:
-				L.cb_size = L.hlsl_size * (4 * (L.dim_y-1) + dim_y)
+				L.cb_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
 		elif L.is_vector:
-		else:
-			L.cb_size = 
+			if L.array_size:
+				L.cb_align = 4
+				L.cb_size = L.hlsl_size * ((4 * (L.array_size-1)) + L.dim_x)
+			else:
+				L.cb_size = L.hlsl_size * L.dim_x
 
+		else:
+			if L.is_array:
+				print("arrays of non-builtin types not supported")
+			L.cb_size = L.hlsl_size
 
 		if L.is_matrix:
-			L.hlsl_type = f"{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
+			L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
 			if array_size:
-				L.hlsl_cb_type = f"hlsl_mat_cb<{L.hlsl_base_type}, {L.dim_x}, {L.dim_y}, {L.array_ext_cb}>"				
+				L.hlsl_cb_type = f"hlsl_marray_cb<hlsl_{L.hlsl_base_type}, {L.dim_x}, {L.dim_y}, {L.array_ext_cb}>"				
 			else:
-				L.hlsl_cb_type = f"hlsl_vec_cb<{L.hlsl_base_type}, {L.dim_x}, {L.dim_y}>"
+				L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
 				
 		elif L.is_vector:
-			L.hlsl_type = f"{L.hlsl_base_type}{L.dim_x}"
-			L.hlsl_cb_type = f"{L.hlsl_base_type}{L.dim_x}"
+			L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
 			if L.array_size:
-				L.hlsl_cb_type = f"hlsl_vec_cb<{L.hlsl_base_type}, {L.dim_x}, {L.array_ext_cb}>"
+				L.hlsl_cb_type = f"hlsl_varray_cb<hlsl_{L.hlsl_base_type}, {L.dim_x}, {L.array_ext_cb}>"
+			else:
+				L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
+
 		else:
 			L.hlsl_type = f"{L.hlsl_base_type}"
 			L.hlsl_cb_type = f"{L.hlsl_base_type}"
@@ -128,10 +140,9 @@ class CBufferGen:
 		off = offset
 		if (off%target) != 0:
 			count = 4 - (off%target)
-			pad_type = "hlsl_int"
-			if count > 1:
-				pad_type = f"{pad_type}{count}" 
-			f.write(f"\t{pad_type:<40} _pad{off};\n");
+			pad_type = f"hlsl_int{count}" 
+			name = f"__pad{off};"
+			f.write(f"\t{pad_type:<40} {name:<40}//[{off}-{off+count-1}]\n");
 			off += count
 		return off
 
@@ -162,17 +173,17 @@ class CBufferGen:
 				offset = 0
 				for l in lines:
 					output_type = l.hlsl_type
-					if l.array_size:
-						#note that for the size of arrays, we just use the plain size, since for alignment purposes each each element can be ignored(since they are all fully aligned)
-						#and additionally its allowed to insert elements after the array. WEIRD SHIT
+					offset_before = offset
+					if l.cb_align == 4:
 						offset = A.Pad(offset, 4, f)
-						output_type = l.hlsl_cb_type 
-					else:
-						if l.hlsl_size > 1 and (offset % 4) + l.hlsl_size > 4:
+					elif l.is_vector:
+						if l.cb_size > 1 and (offset % 4) + l.hlsl_size > 4:
 							offset = A.Pad(offset, 4, f)
-					name = f"{l.name};";
-					f.write(f"\t{output_type:<40} {name} //{offset:<5}\n")
-					offset += l.hlsl_size
+					else:
+						pass
+					name = f"{l.name};"
+					f.write(f"\t{l.hlsl_cb_type:<40} {name:<40}//[{offset}-{offset+l.cb_size-1}]\n")
+					offset += l.cb_size
 				f.write(f"}}")
 		print(f"done -> {output_file}")
 
