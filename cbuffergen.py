@@ -14,7 +14,7 @@ import argparse
 #  uint16_t support
 
 def MapType(type):
-	type_pattern = r'(float|int|uint)(([1-4])(x([1-4]))?)?';
+	type_pattern = r'(float|int|uint|bool)(([1-4])(x([1-4]))?)?';
 	match = re.match(type_pattern, type)
 	type_name = "?"
 	type_align = 1
@@ -85,7 +85,7 @@ class Line:
 				L.cb_size = L.hlsl_size * L.dim_x
 
 		else:
-			if L.is_array:
+			if L.array_size > 0:
 				print("arrays of non-builtin types not supported")
 			L.cb_size = L.hlsl_size
 
@@ -114,7 +114,7 @@ class CBufferGen:
 		A.parser.add_argument("-i", "--input_path", help="input directory", default=".")
 		A.parser.add_argument("-c", "--c_path", help="directory for generated header c file", default=".")
 	def ParseLines(A, lines):
-		line_pattern = r'^[\s](\w+)[\s]*(\w+)((\[([\w]*)\])*)';
+		line_pattern = r'^[\s]*(\w+)[\s]*(\w+)((\[([\w]*)\])*)';
 		matches = re.finditer(line_pattern, lines, re.MULTILINE)
 		output_lines = []
 
@@ -162,6 +162,10 @@ class CBufferGen:
 				if idx != pos:
 					f.write(file_content[pos:idx])
 					pos = end
+
+				if name == "drawStruct":
+					print("yo")
+
 				lines = A.ParseLines(contents)
 				f.write(f"//plain struct\n")
 				f.write(f"struct {name}\n{{\n")
@@ -177,14 +181,16 @@ class CBufferGen:
 					if l.cb_align == 4:
 						offset = A.Pad(offset, 4, f)
 					elif l.is_vector:
-						if l.cb_size > 1 and (offset % 4) + l.hlsl_size > 4:
+						if l.cb_size > 1 and (offset % 4) + l.cb_size > 4:
 							offset = A.Pad(offset, 4, f)
 					else:
 						pass
 					name = f"{l.name};"
 					f.write(f"\t{l.hlsl_cb_type:<40} {name:<40}//[{offset}-{offset+l.cb_size-1}]\n")
 					offset += l.cb_size
-				f.write(f"}}")
+				f.write(f"}};\n")
+			if pos != len(file_content):
+				f.write(file_content[pos:])
 		print(f"done -> {output_file}")
 
 
@@ -196,13 +202,19 @@ class CBufferGen:
 		for filename in os.listdir(A.args.input_path):
 			if filename.endswith(".h"):
 				if not filename.endswith(".cpp.h"):
-					output_file = f"{filename[:-2]}.cpp.h"
-					print(f"input file {filename} -> {output_file}")
-					with open(filename, 'r') as input_file:
+					output_file = f"{A.args.c_path}{filename[:-2]}.cpp.h"
+					input_file = f"{A.args.input_path}{filename}"
+					print(f"{input_file} -> {output_file}")
+					with open(input_file, 'r') as input_file:
 						file_string = input_file.read()
 						A.Parse(file_string, output_file)
-						exit(1)
 
 
 G = CBufferGen();
 G.Run()
+
+
+#		for filename in os.listdir(path):
+#			print("filename %s" % filename)
+#			if filename.endswith(ext):
+#				A.Parse("%s/%s" %(path, filename))
