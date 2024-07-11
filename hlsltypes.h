@@ -258,7 +258,7 @@ struct hlsl_marray_cb
 {
 	static_assert(sizeof(T) == sizeof(uint32), "uint16 and double not yet supported");
 	static const int PADDED_MAT_SIZE = 4 * ROWS;
-	static const int LAST_MAT_SIZE = (4 * ROWS-1) + LEN;
+	static const int LAST_MAT_SIZE = (4 * (ROWS-1)) + LEN;
 	static const int NUM_ELEMENTS = PADDED_MAT_SIZE * (ARRAY_SIZE-1) + LAST_MAT_SIZE;
 	typedef hlsl_varray_cb<T, LEN, ROWS> ELEMENT;
 
@@ -445,6 +445,95 @@ typedef hlsl_varray<hlsl_int, 4, 2> hlsl_bool4x2;
 typedef hlsl_varray<hlsl_int, 4, 3> hlsl_bool4x3; 
 typedef hlsl_varray<hlsl_int, 4, 4> hlsl_bool4x4; 
 
+
+#define hlsl_float1_cb_array(s) hlsl_varray_cb<hlsl_float, 1, s>
+#define hlsl_float2_cb_array(s) hlsl_varray_cb<hlsl_float, 2, s>
+#define hlsl_float3_cb_array(s) hlsl_varray_cb<hlsl_float, 3, s>
+#define hlsl_float4_cb_array(s) hlsl_varray_cb<hlsl_float, 4, s>
+
+#define hlsl_uint1_cb_array(s) hlsl_varray_cb<hlsl_uint, 1, s>
+#define hlsl_uint2_cb_array(s) hlsl_varray_cb<hlsl_uint, 2, s>
+#define hlsl_uint3_cb_array(s) hlsl_varray_cb<hlsl_uint, 3, s>
+#define hlsl_uint4_cb_array(s) hlsl_varray_cb<hlsl_uint, 4, s>
+
+#define hlsl_int1_cb_array(s) hlsl_varray_cb<hlsl_int, 1, s>
+#define hlsl_int2_cb_array(s) hlsl_varray_cb<hlsl_int, 2, s>
+#define hlsl_int3_cb_array(s) hlsl_varray_cb<hlsl_int, 3, s>
+#define hlsl_int4_cb_array(s) hlsl_varray_cb<hlsl_int, 4, s>
+
+#define hlsl_bool1_cb_array(s) hlsl_varray_cb<hlsl_bool, 1, s>
+#define hlsl_bool2_cb_array(s) hlsl_varray_cb<hlsl_bool, 2, s>
+#define hlsl_bool3_cb_array(s) hlsl_varray_cb<hlsl_bool, 3, s>
+#define hlsl_bool4_cb_array(s) hlsl_varray_cb<hlsl_bool, 4, s>
+
+#define hlsl_float1x1_cb_array(s) hlsl_marray_cb<hlsl_float, 1, 1, s>
+#define hlsl_float1x2_cb_array(s) hlsl_marray_cb<hlsl_float, 1, 2, s>
+#define hlsl_float1x3_cb_array(s) hlsl_marray_cb<hlsl_float, 1, 3, s>
+#define hlsl_float1x4_cb_array(s) hlsl_marray_cb<hlsl_float, 1, 4, s>
+#define hlsl_float2x1_cb_array(s) hlsl_marray_cb<hlsl_float, 2, 1, s>
+#define hlsl_float2x2_cb_array(s) hlsl_marray_cb<hlsl_float, 2, 2, s>
+#define hlsl_float2x3_cb_array(s) hlsl_marray_cb<hlsl_float, 2, 3, s>
+#define hlsl_float2x4_cb_array(s) hlsl_marray_cb<hlsl_float, 2, 4, s>
+#define hlsl_float3x1_cb_array(s) hlsl_marray_cb<hlsl_float, 3, 1, s>
+#define hlsl_float3x2_cb_array(s) hlsl_marray_cb<hlsl_float, 3, 2, s>
+#define hlsl_float3x3_cb_array(s) hlsl_marray_cb<hlsl_float, 3, 3, s>
+#define hlsl_float3x4_cb_array(s) hlsl_marray_cb<hlsl_float, 3, 4, s>
+#define hlsl_float4x1_cb_array(s) hlsl_marray_cb<hlsl_float, 4, 1, s>
+#define hlsl_float4x2_cb_array(s) hlsl_marray_cb<hlsl_float, 4, 2, s>
+#define hlsl_float4x3_cb_array(s) hlsl_marray_cb<hlsl_float, 4, 3, s>
+#define hlsl_float4x4_cb_array(s) hlsl_marray_cb<hlsl_float, 4, 4, s>
+
+#define hlsl_uint1x1_cb_array(s) hlsl_marray_cb<hlsl_uint, 1, 1, s>
+#define hlsl_uint1x2_cb_array(s) hlsl_marray_cb<hlsl_uint, 1, 2, s>
+#define hlsl_uint1x3_cb_array(s) hlsl_marray_cb<hlsl_uint, 1, 3, s>
+#define hlsl_uint1x4_cb_array(s) hlsl_marray_cb<hlsl_uint, 1, 4, s>
+#define hlsl_uint2x1_cb_array(s) hlsl_marray_cb<hlsl_uint, 2, 1, s>
+#define hlsl_uint2x2_cb_array(s) hlsl_marray_cb<hlsl_uint, 2, 2, s>
+#define hlsl_uint2x3_cb_array(s) hlsl_marray_cb<hlsl_uint, 2, 3, s>
+#define hlsl_uint2x4_cb_array(s) hlsl_marray_cb<hlsl_uint, 2, 4, s>
+#define hlsl_uint3x1_cb_array(s) hlsl_marray_cb<hlsl_uint, 3, 1, s>
+#define hlsl_uint3x2_cb_array(s) hlsl_marray_cb<hlsl_uint, 3, 2, s>
+#define hlsl_uint3x3_cb_array(s) hlsl_marray_cb<hlsl_uint, 3, 3, s>
+#define hlsl_uint3x4_cb_array(s) hlsl_marray_cb<hlsl_uint, 3, 4, s>
+#define hlsl_uint4x1_cb_array(s) hlsl_marray_cb<hlsl_uint, 4, 1, s>
+#define hlsl_uint4x2_cb_array(s) hlsl_marray_cb<hlsl_uint, 4, 2, s>
+#define hlsl_uint4x3_cb_array(s) hlsl_marray_cb<hlsl_uint, 4, 3, s>
+#define hlsl_uint4x4_cb_array(s) hlsl_marray_cb<hlsl_uint, 4, 4, s>
+
+
+#define hlsl_int1x1_cb_array(s) hlsl_marray_cb<hlsl_int, 1, 1, s>
+#define hlsl_int1x2_cb_array(s) hlsl_marray_cb<hlsl_int, 1, 2, s>
+#define hlsl_int1x3_cb_array(s) hlsl_marray_cb<hlsl_int, 1, 3, s>
+#define hlsl_int1x4_cb_array(s) hlsl_marray_cb<hlsl_int, 1, 4, s>
+#define hlsl_int2x1_cb_array(s) hlsl_marray_cb<hlsl_int, 2, 1, s>
+#define hlsl_int2x2_cb_array(s) hlsl_marray_cb<hlsl_int, 2, 2, s>
+#define hlsl_int2x3_cb_array(s) hlsl_marray_cb<hlsl_int, 2, 3, s>
+#define hlsl_int2x4_cb_array(s) hlsl_marray_cb<hlsl_int, 2, 4, s>
+#define hlsl_int3x1_cb_array(s) hlsl_marray_cb<hlsl_int, 3, 1, s>
+#define hlsl_int3x2_cb_array(s) hlsl_marray_cb<hlsl_int, 3, 2, s>
+#define hlsl_int3x3_cb_array(s) hlsl_marray_cb<hlsl_int, 3, 3, s>
+#define hlsl_int3x4_cb_array(s) hlsl_marray_cb<hlsl_int, 3, 4, s>
+#define hlsl_int4x1_cb_array(s) hlsl_marray_cb<hlsl_int, 4, 1, s>
+#define hlsl_int4x2_cb_array(s) hlsl_marray_cb<hlsl_int, 4, 2, s>
+#define hlsl_int4x3_cb_array(s) hlsl_marray_cb<hlsl_int, 4, 3, s>
+#define hlsl_int4x4_cb_array(s) hlsl_marray_cb<hlsl_int, 4, 4, s>
+
+#define hlsl_bool1x1_cb_array(s) hlsl_marray_cb<hlsl_bool, 1, 1, s>
+#define hlsl_bool1x2_cb_array(s) hlsl_marray_cb<hlsl_bool, 1, 2, s>
+#define hlsl_bool1x3_cb_array(s) hlsl_marray_cb<hlsl_bool, 1, 3, s>
+#define hlsl_bool1x4_cb_array(s) hlsl_marray_cb<hlsl_bool, 1, 4, s>
+#define hlsl_bool2x1_cb_array(s) hlsl_marray_cb<hlsl_bool, 2, 1, s>
+#define hlsl_bool2x2_cb_array(s) hlsl_marray_cb<hlsl_bool, 2, 2, s>
+#define hlsl_bool2x3_cb_array(s) hlsl_marray_cb<hlsl_bool, 2, 3, s>
+#define hlsl_bool2x4_cb_array(s) hlsl_marray_cb<hlsl_bool, 2, 4, s>
+#define hlsl_bool3x1_cb_array(s) hlsl_marray_cb<hlsl_bool, 3, 1, s>
+#define hlsl_bool3x2_cb_array(s) hlsl_marray_cb<hlsl_bool, 3, 2, s>
+#define hlsl_bool3x3_cb_array(s) hlsl_marray_cb<hlsl_bool, 3, 3, s>
+#define hlsl_bool3x4_cb_array(s) hlsl_marray_cb<hlsl_bool, 3, 4, s>
+#define hlsl_bool4x1_cb_array(s) hlsl_marray_cb<hlsl_bool, 4, 1, s>
+#define hlsl_bool4x2_cb_array(s) hlsl_marray_cb<hlsl_bool, 4, 2, s>
+#define hlsl_bool4x3_cb_array(s) hlsl_marray_cb<hlsl_bool, 4, 3, s>
+#define hlsl_bool4x4_cb_array(s) hlsl_marray_cb<hlsl_bool, 4, 4, s>
 
 
 #endif

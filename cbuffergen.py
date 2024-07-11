@@ -92,14 +92,14 @@ class Line:
 		if L.is_matrix:
 			L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
 			if array_size:
-				L.hlsl_cb_type = f"hlsl_marray_cb<hlsl_{L.hlsl_base_type}, {L.dim_x}, {L.dim_y}, {L.array_ext_cb}>"				
+				L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cb_array({L.array_ext_cb})"
 			else:
-				L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
+				L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cb"
 				
 		elif L.is_vector:
 			L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
 			if L.array_size:
-				L.hlsl_cb_type = f"hlsl_varray_cb<hlsl_{L.hlsl_base_type}, {L.dim_x}, {L.array_ext_cb}>"
+				L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}_cb_array({L.array_ext_cb})"
 			else:
 				L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
 
@@ -142,7 +142,7 @@ class CBufferGen:
 			count = 4 - (off%target)
 			pad_type = f"hlsl_int{count}" 
 			name = f"__pad{off};"
-			f.write(f"\t{pad_type:<40} {name:<40}//[{off}-{off+count-1}]\n");
+			f.write(f"\t{pad_type:<40} {name:<40}//[{4*off}-{4*(off+count-1)}]\n");
 			off += count
 		return off
 
@@ -150,7 +150,6 @@ class CBufferGen:
 		struct_pattern = r'struct ([^\s]+)[\s]+{([^{}]*)}[\s]*;'
 		pos = 0
 		end = len(file_content)
-		print(f"writing -> {output_file}")
 		with open(output_file, "w") as f:
 			matches = re.finditer(struct_pattern, file_content, re.MULTILINE)
 			for match in matches:
@@ -186,12 +185,11 @@ class CBufferGen:
 					else:
 						pass
 					name = f"{l.name};"
-					f.write(f"\t{l.hlsl_cb_type:<40} {name:<40}//[{offset}-{offset+l.cb_size-1}]\n")
+					f.write(f"\t{l.hlsl_cb_type:<40} {name:<40}//[{offset}-{offset+l.cb_size-1}] [{offset*4}-{4*(offset+l.cb_size-1)}]\n")
 					offset += l.cb_size
 				f.write(f"}};\n")
 			if pos != len(file_content):
 				f.write(file_content[pos:])
-		print(f"done -> {output_file}")
 
 
 	def Run(A):
@@ -202,19 +200,13 @@ class CBufferGen:
 		for filename in os.listdir(A.args.input_path):
 			if filename.endswith(".h"):
 				if not filename.endswith(".cpp.h"):
-					output_file = f"{A.args.c_path}{filename[:-2]}.cpp.h"
-					input_file = f"{A.args.input_path}{filename}"
+					output_file = f"{A.args.c_path}/{filename[:-2]}.cpp.h"
+					input_file = f"{A.args.input_path}/{filename}"
 					print(f"{input_file} -> {output_file}")
 					with open(input_file, 'r') as input_file:
 						file_string = input_file.read()
 						A.Parse(file_string, output_file)
 
-
 G = CBufferGen();
 G.Run()
 
-
-#		for filename in os.listdir(path):
-#			print("filename %s" % filename)
-#			if filename.endswith(ext):
-#				A.Parse("%s/%s" %(path, filename))
