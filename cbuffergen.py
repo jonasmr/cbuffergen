@@ -7,46 +7,28 @@ import time
 import shlex
 import json
 import argparse
+from enum import Enum
 #
 # TODO
-#  User defined types are assumed to be 4 bytes, and arrays of them are not supported
-#  double support
-#  uint16_t support
+#  typedef only supports size==4b
+#  typedef does not support arrays
+#  structs does not support arrays
+#  structs only support structs from the same file
+#  size calcs are in dwords, so no support for double, uint16_t
 
-def MapType(type):
-	type_pattern = r'(float|int|uint|bool)(([1-4])(x([1-4]))?)?';
-	match = re.match(type_pattern, type)
-	type_name = "?"
-	type_align = 1
-	dim_x = 0
-	dim_y = 0
-	size = 1
-	external = 0
-	if match: 
-		#builtin or array type
-		type_name = f'{match.group(1)}'
-		if match.group(5):
-			dim_x = int(match.group(3))
-			dim_y = int(match.group(5))
-		elif match.group(3):
-			dim_x = int(match.group(3))
-		else:
-			dim_x = 1
+class TypeClass(Enum):
+	BUILTIN = 1
+	TYPEDEF = 2
+	STRUCT = 3
 
-
-	else:
-		if type == 'PalDescriptorHandle':
-			type_name = type
-			size = 1
-			external = 1
-		else:
-			print(f"unknown type {type}, exiting\n")
-			exit(1)
-
-	return type_name, size, dim_x, dim_y, external
+# name/size pairs of all typedefs
+Typedefs = {
+	"PalDescriptorHandle":1
+}
 
 class Line:
-	def __init__(L, type, name, array_size, array_ext):
+	def __init__(L, G, type, name, array_size, array_ext):
+		L.G = G
 		L.type = type
 		L.name = name
 		L.array_size = array_size
@@ -57,11 +39,11 @@ class Line:
 			L.array_ext = ""
 			L.array_ext_cb = ""
 
-		L.hlsl_base_type, L.hlsl_size, L.dim_x, L.dim_y, L.is_external = MapType(type)
+		L.hlsl_base_type, L.hlsl_size, L.dim_x, L.dim_y, L.type_class = G.MapType(type)
 		if L.dim_y:
 			L.is_matrix = True
 			L.is_vector = False
-		elif not L.is_external:
+		elif L.type_class == TypeClass.BUILTIN:  #not L.is_external:
 			L.is_matrix = False
 			L.is_vector = True
 		else:
@@ -85,9 +67,19 @@ class Line:
 				L.cb_size = L.hlsl_size * L.dim_x
 
 		else:
-			if L.array_size > 0:
-				print("arrays of non-builtin types not supported")
-			L.cb_size = L.hlsl_size
+			if L.type_class == TypeClass.BUILTIN:
+				if L.array_size > 0:
+					print("arrays of non-builtin types not supported")
+					exit(1)
+				L.cb_size = L.hlsl_size
+			elif L.type_class == TypeClass.STRUCT:
+				if L.array_size > 0:
+					print("arrays of non-builtin types not supported")
+					exit(1)
+				L.cb_size = L.hlsl_size
+				L.cb_align = 4
+			else:
+				L.cb_size = L.hlsl_size
 
 		if L.is_matrix:
 			L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
@@ -105,7 +97,10 @@ class Line:
 
 		else:
 			L.hlsl_type = f"{L.hlsl_base_type}"
-			L.hlsl_cb_type = f"{L.hlsl_base_type}"
+			if L.type_class == TypeClass.STRUCT:
+				L.hlsl_cb_type = f"{L.hlsl_base_type}_cb"
+			else:
+				L.hlsl_cb_type = f"{L.hlsl_base_type}"
 
 class CBufferGen:
 	def __init__(A):
@@ -113,6 +108,7 @@ class CBufferGen:
 		A.parser = argparse.ArgumentParser()
 		A.parser.add_argument("-i", "--input_path", help="input directory", default=".")
 		A.parser.add_argument("-c", "--c_path", help="directory for generated header c file", default=".")
+		A.known_structs = {}
 	def ParseLines(A, lines):
 		line_pattern = r'^[\s]*(\w+)[\s]*(\w+)((\[([\w]*)\])*)';
 		matches = re.finditer(line_pattern, lines, re.MULTILINE)
@@ -132,7 +128,7 @@ class CBufferGen:
 					array_size = int(array_ext)
 				except:
 					pass
-			l = Line(match.group(1), match.group(2), array_size, array_ext)
+			l = Line(A, match.group(1), match.group(2), array_size, array_ext)
 			output_lines.append(l)
 		return output_lines
 
@@ -142,7 +138,7 @@ class CBufferGen:
 			count = 4 - (off%target)
 			pad_type = f"hlsl_int{count}" 
 			name = f"__pad{off};"
-			f.write(f"\t{pad_type:<40} {name:<40}//[{4*off}-{4*(off+count-1)}]\n");
+			f.write(f"\t{pad_type:<40} {name:<40}//[{off}-{(off+count-1)}] [{4*off}-{4*(off+count-1)}]\n");
 			off += count
 		return off
 
@@ -155,24 +151,21 @@ class CBufferGen:
 			for match in matches:
 				idx = match.start()
 				end = match.end()
-				name = match.group(1)
+				struct_name = match.group(1)
 				contents = match.group(2)
 				#print stuff before match.
 				if idx != pos:
 					f.write(file_content[pos:idx])
 					pos = end
 
-				if name == "drawStruct":
-					print("yo")
-
 				lines = A.ParseLines(contents)
 				f.write(f"//plain struct\n")
-				f.write(f"struct {name}\n{{\n")
+				f.write(f"struct {struct_name}\n{{\n")
 				for l in lines:
 					f.write(f"\t{l.hlsl_type:<30} {l.name}{l.array_ext};\n")
 				f.write(f"}};\n\n")		
 				f.write(f"//const buffer struct\n")
-				f.write(f"struct {name}CB\n{{\n")
+				f.write(f"struct {struct_name}_cb\n{{\n")
 				offset = 0
 				for l in lines:
 					output_type = l.hlsl_type
@@ -187,7 +180,8 @@ class CBufferGen:
 					name = f"{l.name};"
 					f.write(f"\t{l.hlsl_cb_type:<40} {name:<40}//[{offset}-{offset+l.cb_size-1}] [{offset*4}-{4*(offset+l.cb_size-1)}]\n")
 					offset += l.cb_size
-				f.write(f"}};\n")
+				f.write(f"}}; // struct size:{offset}\n")
+				A.known_structs[struct_name] = offset
 			if pos != len(file_content):
 				f.write(file_content[pos:])
 
@@ -200,12 +194,53 @@ class CBufferGen:
 		for filename in os.listdir(A.args.input_path):
 			if filename.endswith(".h"):
 				if not filename.endswith(".cpp.h"):
+					A.known_structs = {}
 					output_file = f"{A.args.c_path}/{filename[:-2]}.cpp.h"
 					input_file = f"{A.args.input_path}/{filename}"
 					print(f"{input_file} -> {output_file}")
 					with open(input_file, 'r') as input_file:
 						file_string = input_file.read()
 						A.Parse(file_string, output_file)
+
+	def MapType(A, type):
+		type_pattern = r'(float|int|uint|bool)(([1-4])(x([1-4]))?)?';
+		match = re.match(type_pattern, type)
+		type_name = "?"
+		dim_x = 0
+		dim_y = 0
+		size = 1
+		type_class = TypeClass.BUILTIN
+		external = 0
+		if match:
+			#builtin or array type
+			type_name = f'{match.group(1)}'
+			if match.group(5):
+				dim_x = int(match.group(3))
+				dim_y = int(match.group(5))
+			elif match.group(3):
+				dim_x = int(match.group(3))
+			else:
+				dim_x = 1
+
+
+		else:
+			if type in Typedefs:
+				type_name = type
+				size = Typedefs[type_name]
+				type_class = TypeClass.TYPEDEF
+			else:
+				if type in A.known_structs:
+					#print(f"found known struct {type}")
+					type_name = type
+					size = A.known_structs[type]
+					type_class = TypeClass.STRUCT
+				else:
+					print(f"failed to find known struct {type}\n")
+					print(f"unknown type {type}, exiting\n")
+					exit(1)
+
+		return type_name, size, dim_x, dim_y, type_class
+
 
 G = CBufferGen();
 G.Run()
