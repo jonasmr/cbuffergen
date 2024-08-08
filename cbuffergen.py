@@ -102,6 +102,15 @@ class Line:
 			else:
 				L.hlsl_cb_type = f"{L.hlsl_base_type}"
 
+class CBufferGenStruct:
+	def __init__(A):
+		A.dependencies = set()
+
+class CBufferGenFile:
+	def __init__(A):
+		A.structs = {}
+
+
 class CBufferGen:
 	def __init__(A):
 		print(" **** RUNNING CBufferGen ****")
@@ -109,6 +118,8 @@ class CBufferGen:
 		A.parser.add_argument("-i", "--input_path", help="input directory", default=".")
 		A.parser.add_argument("-c", "--c_path", help="directory for generated header c file", default=".")
 		A.known_structs = {}
+		A.files = []
+
 	def ParseLines(A, lines):
 		line_pattern = r'^[\s]*(\w+)[\s]*(\w+)((\[([\w]*)\])*)';
 		matches = re.finditer(line_pattern, lines, re.MULTILINE)
@@ -141,6 +152,43 @@ class CBufferGen:
 			f.write(f"\t{pad_type:<40} {name:<40}//[{off}-{(off+count-1)}] [{4*off}-{4*(off+count-1)}]\n");
 			off += count
 		return off
+
+	def Parse2(A, file_content, out_file):
+		
+		File = CBufferGenFile()
+		File.out_file = out_file
+		struct_pattern = r'struct ([^\s]+)[\s]+{([^{}]*)}[\s]*;'
+		pos = 0
+		end = len(file_content)
+
+		matches = re.finditer(struct_pattern, file_content, re.MULTILINE)
+		for match in matches:
+			idx = match.start()
+			end = match.end()
+			struct_name = match.group(1)
+			contents = match.group(2)
+			#print stuff before match.
+			pre_text = "" 
+			if idx != pos:
+				pre_text = file_content[pos:idx]
+				pos = end
+			struct = CBufferGenStruct()
+			struct.pre_text = pre_text
+			struct.lines = A.ParseLines(contents)
+			struct.File = File
+			for l in struct.lines:
+				if l.type_class == TypeClass.STRUCT:
+					struct.dependencies.add(l.name)
+			File.structs[struct_name] = struct
+			if struct_name in A.known_structs:
+				print(f"error: duplicate struct {struct_name}")
+				exit(1)
+			A.known_structs[struct_name] = struct
+		if pos != len(file_content):
+			File.tail_text = file_content[pos:]
+		A.files.append(File)
+
+	calc sizes (recursive)
 
 	def Parse(A, file_content, output_file):
 		struct_pattern = r'struct ([^\s]+)[\s]+{([^{}]*)}[\s]*;'
@@ -200,6 +248,7 @@ class CBufferGen:
 					print(f"{input_file} -> {output_file}")
 					with open(input_file, 'r') as input_file:
 						file_string = input_file.read()
+						A.Parse2(file_string, output_file)
 						A.Parse(file_string, output_file)
 
 	def MapType(A, type):
