@@ -12,8 +12,8 @@
 			"windows":
 			{
 				"file_regex": "File \"(...*?)\", line ([0-9]*)",
-				"shell_cmd": "cbuffergen",
-				"working_dir": "${project_path}"
+				"shell_cmd": "cbuffergen -g ./hlsl",
+				"working_dir": "${project_path}",
 			},
 		}
 	],	
