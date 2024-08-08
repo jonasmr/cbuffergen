@@ -298,9 +298,6 @@ class CBufferGen:
 					pass
 				l.cb_offset = offset
 				l.cb_pad_string = pad_string
-				#name = f"{l.name};"
-				#f.write(f"\t{l.hlsl_cb_type:<40} {name:<40}//[{offset}-{offset+l.cb_size-1}] [{offset*4}-{4*(offset+l.cb_size-1)}]\n")
-				# resolve struct size here..
 				if l.cb_size == DELAYED_STRUCT_SIZE:
 					decl_struct = A.all_structs[l.type]
 					l.cb_size = decl_struct.cb_size
@@ -316,50 +313,6 @@ class CBufferGen:
 		elif parse_state == 2:
 			pass #already processed
 
-	def Parse(A, file_content, output_file):
-		struct_pattern = r'struct ([^\s]+)[\s]+{([^{}]*)}[\s]*;'
-		pos = 0
-		end = len(file_content)
-		with open(output_file, "w") as f:
-			matches = re.finditer(struct_pattern, file_content, re.MULTILINE)
-			for match in matches:
-				idx = match.start()
-				end = match.end()
-				struct_name = match.group(1)
-				contents = match.group(2)
-				#print stuff before match.
-				if idx != pos:
-					f.write(file_content[pos:idx])
-					pos = end
-
-				lines = A.ParseLines(contents)
-				f.write(f"//plain struct\n")
-				f.write(f"struct {struct_name}\n{{\n")
-				for l in lines:
-					f.write(f"\t{l.hlsl_type:<30} {l.name}{l.array_ext};\n")
-				f.write(f"}};\n\n")		
-				f.write(f"//const buffer struct\n")
-				f.write(f"struct {struct_name}_cb\n{{\n")
-				offset = 0
-				for l in lines:
-					output_type = l.hlsl_type
-					offset_before = offset
-					if l.cb_align == 4:
-						offset = A.Pad(offset, 4, f)
-					elif l.is_vector:
-						if l.cb_size > 1 and (offset % 4) + l.cb_size > 4:
-							offset = A.Pad(offset, 4, f)
-					else:
-						pass
-					if l.cb_size == DELAYED_STRUCT_SIZE:
-						l.cb_size = A.known_struct_sizes[l.type]
-					name = f"{l.name};"
-					f.write(f"\t{l.hlsl_cb_type:<40} {name:<40}//[{offset}-{offset+l.cb_size-1}] [{offset*4}-{4*(offset+l.cb_size-1)}]\n")
-					offset += l.cb_size
-				f.write(f"}}; // struct size:{offset}\n")
-				A.known_struct_sizes[struct_name] = offset
-			if pos != len(file_content):
-				f.write(file_content[pos:])
 
 	def MapType(A, type):
 		type_pattern = r'(float|int|uint|bool)(([1-4])(x([1-4]))?)?';
@@ -380,8 +333,6 @@ class CBufferGen:
 				dim_x = int(match.group(3))
 			else:
 				dim_x = 1
-
-
 		else:
 			if type in Typedefs:
 				type_name = type
@@ -399,35 +350,19 @@ class CBufferGen:
 		A.args = A.parser.parse_args()
 		print("input path %s" % A.args.input_path)
 		print("c path %s" % A.args.c_path)
-		if True:
-			for filename in os.listdir(A.args.input_path):
-				if filename.endswith(".h"):
-					if not (filename.endswith(".cpp.h") or filename.endswith(".globals.h")):
-						A.known_structs = {}
-						output_file = f"{A.args.c_path}/{filename[:-2]}.cpp.h"
-						output_globals_file = f"{A.args.input_path}/{filename[:-2]}.globals.h"
-						input_file = f"{A.args.input_path}/{filename}"
-						print(f"read {input_file}")
-						with open(input_file, 'r') as input_file:
-							file_string = input_file.read()
-							A.Parse2(file_string, output_file, output_globals_file)
-			A.CalcSizes()
-			A.WriteFiles()
-
-		else:
-		
-			for filename in os.listdir(A.args.input_path):
-				if filename.endswith(".h"):
-					if not filename.endswith(".cpp.h"):
-						A.known_structs = {}
-						output_file = f"{A.args.c_path}/{filename[:-2]}.cpp.h"
-						input_file = f"{A.args.input_path}/{filename}"
-						print(f"{input_file} -> {output_file}")
-						with open(input_file, 'r') as input_file:
-							file_string = input_file.read()
-							A.Parse(file_string, output_file)
-
-
+		for filename in os.listdir(A.args.input_path):
+			if filename.endswith(".h"):
+				if not (filename.endswith(".cpp.h") or filename.endswith(".globals.h")):
+					A.known_structs = {}
+					output_file = f"{A.args.c_path}/{filename[:-2]}.cpp.h"
+					output_globals_file = f"{A.args.input_path}/{filename[:-2]}.globals.h"
+					input_file = f"{A.args.input_path}/{filename}"
+					print(f"read {input_file}")
+					with open(input_file, 'r') as input_file:
+						file_string = input_file.read()
+						A.Parse2(file_string, output_file, output_globals_file)
+		A.CalcSizes()
+		A.WriteFiles()
 
 G = CBufferGen();
 G.Run()
