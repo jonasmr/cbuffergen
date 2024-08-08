@@ -117,7 +117,8 @@ class CBufferGen:
 		A.parser = argparse.ArgumentParser()
 		A.parser.add_argument("-i", "--input_path", help="input directory", default=".")
 		A.parser.add_argument("-c", "--c_path", help="directory for generated header c file", default=".")
-		A.known_structs = {}
+		A.known_struct_sizes = {}
+		A.all_structs = {}
 		A.files = []
 
 	def ParseLines(A, lines):
@@ -175,20 +176,69 @@ class CBufferGen:
 			struct = CBufferGenStruct()
 			struct.pre_text = pre_text
 			struct.lines = A.ParseLines(contents)
-			struct.File = File
+			struct.file = File
+			struct.parse_state = 0
+			struct.name = l.name
 			for l in struct.lines:
 				if l.type_class == TypeClass.STRUCT:
 					struct.dependencies.add(l.name)
 			File.structs[struct_name] = struct
-			if struct_name in A.known_structs:
+			if struct_name in A.all_structs:
 				print(f"error: duplicate struct {struct_name}")
 				exit(1)
-			A.known_structs[struct_name] = struct
+			A.all_structs[struct_name] = struct
 		if pos != len(file_content):
 			File.tail_text = file_content[pos:]
 		A.files.append(File)
+	def CalcSizes(A):
+		for struct in A.structs:
+			A.ParseRecursive(struct)
 
-	calc sizes (recursive)
+	def ParsePush(A, struct):
+		A.struct_stack.append(struct)
+
+	def ParsePop(A):
+		A.struct_stack.pop()
+
+	def ParseDump(A):
+		print(f"Recursive struct references")
+		for s in A.struct_stack
+			print(f"\t{s.name}")
+
+	def ParseRecursive(A, struct):
+		parse_state = struct.parse_state
+		if parse_state == 0:
+			struct.parse_state = 1
+			A.ParsePush(struct)
+			for dep_name in struct.dependencies:
+				if not dep_name in A.all_structs:
+					print(f"unknown struct {dep_name}")
+				dep_struct = A.all_structs[dep_name]
+				A.ParseRecursive(dep_struct)
+			offset = 0
+			for l in lines:
+				output_type = l.hlsl_type
+				offset_before = offset
+				if l.cb_align == 4:
+					offset = A.Pad(offset, 4, f)
+				elif l.is_vector:
+					if l.cb_size > 1 and (offset % 4) + l.cb_size > 4:
+						offset = A.Pad(offset, 4, f)
+				else:
+					pass
+				#name = f"{l.name};"
+				#f.write(f"\t{l.hlsl_cb_type:<40} {name:<40}//[{offset}-{offset+l.cb_size-1}] [{offset*4}-{4*(offset+l.cb_size-1)}]\n")
+				resolve struct size here..
+				offset += l.cb_size
+			f.write(f"}}; // struct size:{offset}\n")
+			A.known_structs[struct_name] = offset
+
+
+			A.ParsePop()
+		elif parse_state == 1:
+			ParseDump()
+		elif parse_state == 2:
+			pass #already processed
 
 	def Parse(A, file_content, output_file):
 		struct_pattern = r'struct ([^\s]+)[\s]+{([^{}]*)}[\s]*;'
@@ -278,10 +328,10 @@ class CBufferGen:
 				size = Typedefs[type_name]
 				type_class = TypeClass.TYPEDEF
 			else:
-				if type in A.known_structs:
+				if type in A.known_struct_sizes:
 					#print(f"found known struct {type}")
 					type_name = type
-					size = A.known_structs[type]
+					size = A.known_struct_sizes[type]
 					type_class = TypeClass.STRUCT
 				else:
 					print(f"failed to find known struct {type}\n")
