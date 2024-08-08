@@ -44,7 +44,7 @@ class Line:
 		if L.dim_y:
 			L.is_matrix = True
 			L.is_vector = False
-		elif L.type_class == TypeClass.BUILTIN:  #not L.is_external:
+		elif L.type_class == TypeClass.BUILTIN:
 			L.is_matrix = False
 			L.is_vector = True
 		else:
