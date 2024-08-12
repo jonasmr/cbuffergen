@@ -1,6 +1,6 @@
 #pragma once
 #include "helpers/descriptorhandle.h"
-
+#include "appearanceStruct.h"
 
 struct funk
 {
