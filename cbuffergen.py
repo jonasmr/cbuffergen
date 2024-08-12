@@ -357,7 +357,7 @@ class CBufferGen:
 		return type_name, size, dim_x, dim_y, type_class
 
 
-	def FixupIncludes(A.input_string, filenames):
+	def FixupIncludes(A, input_string, filenames):
 		include_pattern = r'^\#include[\s]+"([\S]+)"'
 		matches = re.finditer(include_pattern, input_string, re.MULTILINE)
 		pos = 0
@@ -366,14 +366,16 @@ class CBufferGen:
 		for match in matches:
 			idx = match.start()
 			end = match.end()
-			fname = match.group(0)
+			includename = match.group(1)
 			if idx != pos:
 				buffer.write(input_string[pos:idx])
-			buffer.write(f"#include 'FISK{fname}'")
-			idx = end
-
+			if includename in filenames:
+				includename = f"{includename[:-2]}.cpp.h"
+			buffer.write(f'#include "{includename}"')
+			pos = end
 		if pos != input_end:
 			buffer.write(input_string[pos:])
+		return buffer.getvalue()
 
 
 	def Run(A):
