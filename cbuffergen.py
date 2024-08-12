@@ -7,6 +7,8 @@ import time
 import shlex
 import json
 import argparse
+
+from io import StringIO
 from enum import Enum
 #
 # TODO
@@ -354,26 +356,52 @@ class CBufferGen:
 
 		return type_name, size, dim_x, dim_y, type_class
 
+
+	def FixupIncludes(A.input_string, filenames):
+		include_pattern = r'^\#include[\s]+"([\S]+)"'
+		matches = re.finditer(include_pattern, input_string, re.MULTILINE)
+		pos = 0
+		input_end = len(input_string)
+		buffer = StringIO()
+		for match in matches:
+			idx = match.start()
+			end = match.end()
+			fname = match.group(0)
+			if idx != pos:
+				buffer.write(input_string[pos:idx])
+			buffer.write(f"#include 'FISK{fname}'")
+			idx = end
+
+		if pos != input_end:
+			buffer.write(input_string[pos:])
+
+
 	def Run(A):
 		A.args = A.parser.parse_args()
 		print("input path %s" % A.args.input_path)
 		print("c path %s" % A.args.c_path)
 		print("global path %s" % A.args.global_path)
 
+		input_files = []
 		
 		for filename in os.listdir(A.args.input_path):
 			if filename.endswith(".h"):
 				if not (filename.endswith(".cpp.h") or filename.endswith(".globals.h")):
-					A.known_structs = {}
-					output_file = f"{A.args.c_path}/{filename[:-2]}.cpp.h"
-					output_globals_file = ""
-					if A.args.global_path:
-						output_globals_file = f"{A.args.global_path}/{filename[:-2]}.globals.hlsl"
-					input_file = f"{A.args.input_path}/{filename}"
-					print(f"read {input_file}")
-					with open(input_file, 'r') as input_file:
-						file_string = input_file.read()
-						A.Parse2(file_string, output_file, output_globals_file)
+					input_files.append(filename)
+
+		for filename in input_files:
+
+			input_file = f"{A.args.input_path}/{filename}"
+			print(f"read {input_file}")
+			with open(input_file, 'r') as input_file:
+				file_string = input_file.read()
+				file_string = A.FixupIncludes(file_string, input_files)
+				A.known_structs = {}
+				output_file = f"{A.args.c_path}/{filename[:-2]}.cpp.h"
+				output_globals_file = ""
+				if A.args.global_path:
+					output_globals_file = f"{A.args.global_path}/{filename[:-2]}.globals.hlsl"
+					A.Parse2(file_string, output_file, output_globals_file)
 		A.CalcSizes()
 		A.WriteFiles()
 
