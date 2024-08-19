@@ -243,7 +243,7 @@ class CBufferGen:
 					f.write(f"struct {struct_name}_cb\n{{\n")
 					offset = 0
 					for l in struct.lines:
-						offset = l.cb_offset = offset
+						offset = l.cb_offset
 						if l.cb_pad_string:
 							f.write(l.cb_pad_string)
 						n = f"{l.name};"
@@ -263,7 +263,7 @@ class CBufferGen:
 						struct = file.structs[struct_name]
 						f.write(f"\n\n#ifdef {struct_name.upper()}_GLOBALS\n")
 						struct = file.structs[struct_name]
-						A.WriteMembersRecurse(f, f"{struct_name}_global", struct)
+						A.WriteMembersRecurse(f, f"{struct_name.upper()}_GLOBALS", struct)
 						f.write(f"#endif //{struct_name.upper()}_GLOBALS\n\n")
 
 
@@ -299,12 +299,12 @@ class CBufferGen:
 				offset_before = offset
 				pad_string = ""
 				if l.cb_align == 4:
-					x, pad_string = A.Pad2(offset, 4)
-					offset = offset + x
+					padded_offset, pad_string = A.Pad2(offset, 4)
+					offset = padded_offset
 				elif l.is_vector:
 					if l.cb_size > 1 and (offset % 4) + l.cb_size > 4:
-						x, pad_string = A.Pad2(offset, 4)
-						offset = offset + x
+						padded_offset, pad_string = A.Pad2(offset, 4)
+						offset = padded_offset
 				else:
 					pass
 				l.cb_offset = offset
