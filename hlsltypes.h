@@ -226,8 +226,41 @@ struct hlsl_varray_cb
 		memcpy(&data[0], &other, sizeof(data));
 		return *this;
 	}
+};
+
+
+template<typename T, size_t ARRAY_SIZE>
+struct hlsl_any_array_cb
+{
+	static const size_t ELEMENT_SIZE = sizeof(T);
+	static const size_t ELEMENT_ARRAY_SIZE = 16 * ((ELEMENT_SIZE + 15) / 16); 
+	static const int NUM_BYTES = (ARRAY_SIZE-1) * ELEMENT_ARRAY_SIZE + sizeof(T);
+
+	char data[NUM_BYTES];
+
+	ELEMENT& operator[](int index)
+	{
+		HLSL_ASSERT(index < ARRAY_SIZE);
+		T* ptr = &data[index*ELEMENT_ARRAY_SIZE];
+		return *(ELEMENT*)ptr;
+	}
+	const ELEMENT& operator[](int index) const
+	{
+		HLSL_ASSERT(index < ARRAY_SIZE);
+		T* ptr = &data[index*ELEMENT_ARRAY_SIZE];
+		return *(ELEMENT*)ptr;
+	}
+	template<typename S>
+	hlsl_varray_cb& operator = (const S& other)
+	{
+		static_assert(sizeof(S) == sizeof(*this), "sizeof must match exactly. ");
+		memcpy(&data[0], &other, sizeof(data));
+		return *this;
+	}
 
 };
+
+
 
 template<typename T, size_t LEN, size_t ROWS, size_t ARRAY_SIZE>
 struct hlsl_marray

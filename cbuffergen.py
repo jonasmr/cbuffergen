@@ -29,6 +29,11 @@ Typedefs = {
 	"PalDescriptorHandle":1
 }
 
+
+def GetArraySize(size, array_size):
+	total_size = (array_size-1) * (4*(size+3)/4) + size
+	return int(total_size)
+
 class Line:
 	def __init__(L, G, type, name, array_size, array_ext):
 		L.G = G
@@ -54,56 +59,66 @@ class Line:
 			L.is_vector = False
 
 		L.cb_align = 1
-		if L.is_matrix:
+		if L.type_class == TypeClass.BUILTIN:
+			if L.is_matrix:
+				L.cb_align = 4
+				if L.array_size:
+					padded_mat_size = L.hlsl_size * 4 * L.dim_y
+					last_mat_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
+					L.cb_size = padded_mat_size * (L.array_size-1) + last_mat_size
+				else:
+					L.cb_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
+			elif L.is_vector:
+				if L.array_size:
+					L.cb_align = 4
+					L.cb_size = L.hlsl_size * ((4 * (L.array_size-1)) + L.dim_x)
+				else:
+					L.cb_size = L.hlsl_size * L.dim_x
+
+			if L.is_matrix:
+				L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
+				if array_size:
+					L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cb_array({L.array_ext_cb})"
+				else:
+					L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cb"
+					
+			elif L.is_vector:
+				L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
+				if L.array_size:
+					L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}_cb_array({L.array_ext_cb})"
+				else:
+					L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
+
+
+		elif L.type_class == TypeClass.STRUCT:
+			if L.is_matrix or L.is_vector:
+				print(f"matrix/vector structs not supported")
+				exit(1)
+			L.cb_size = L.hlsl_size
 			L.cb_align = 4
-			if L.array_size:
-				padded_mat_size = L.hlsl_size * 4 * L.dim_y
-				last_mat_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
-				L.cb_size = padded_mat_size * (L.array_size-1) + last_mat_size
-			else:
-				L.cb_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
-		elif L.is_vector:
-			if L.array_size:
-				L.cb_align = 4
-				L.cb_size = L.hlsl_size * ((4 * (L.array_size-1)) + L.dim_x)
-			else:
-				L.cb_size = L.hlsl_size * L.dim_x
-
-		else:
-			if L.type_class == TypeClass.BUILTIN:
-				if L.array_size > 0:
-					print("arrays of non-builtin types not supported")
-					exit(1)
-				L.cb_size = L.hlsl_size
-			elif L.type_class == TypeClass.STRUCT:
-				if L.array_size > 0:
-					print("arrays of non-builtin types not supported")
-					exit(1)
-				L.cb_size = L.hlsl_size
-				L.cb_align = 4
-			else:
-				L.cb_size = L.hlsl_size
-
-		if L.is_matrix:
-			L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
-			if array_size:
-				L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cb_array({L.array_ext_cb})"
-			else:
-				L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cb"
-				
-		elif L.is_vector:
-			L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
-			if L.array_size:
-				L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}_cb_array({L.array_ext_cb})"
-			else:
-				L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
-
-		else:
 			L.hlsl_type = f"{L.hlsl_base_type}"
-			if L.type_class == TypeClass.STRUCT:
-				L.hlsl_cb_type = f"{L.hlsl_base_type}_cb"
+			if L.array_size > 0:
+				L.hlsl_cb_type = f"hlsl_any_array_cb<{L.hlsl_base_type}_cb, {L.array_size}>"
 			else:
-				L.hlsl_cb_type = f"{L.hlsl_base_type}"
+				L.hlsl_cb_type = f"{L.hlsl_base_type}_cb"
+
+		elif L.type_class == TypeClass.TYPEDEF:
+			if L.array_size:
+				L.cb_size = GetArraySize(L.hlsl_size, L.array_size) # L.hlsl_size + (L.array_size-1) * 4
+				L.cb_align = 4
+			else:
+				L.cb_size = L.hlsl_size
+
+			L.hlsl_type = f"{L.hlsl_base_type}"
+			if L.array_size:
+				L.hlsl_cb_type = f"hlsl_any_array_cb<{L.hlsl_base_type}, {L.array_size}>"
+			else:
+				L.hlsl_cb_type = L.hlsl_base_type
+
+		else:
+			print(f"unknown typeclass {L.type_class}")
+			exit(1)
+
 
 class CBufferGenStruct:
 	def __init__(A):
@@ -168,7 +183,7 @@ class CBufferGen:
 			count = 4 - (off%target)
 			pad_type = f"hlsl_int{count}" 
 			name = f"__pad{off};"
-			pad_string = f"\t{pad_type:<40} {name:<40}//[{off}-{(off+count-1)}] [{4*off}-{4*(off+count-1)}]\n";
+			pad_string = f"\t{pad_type:<50} {name:<40}//[{off}-{(off+count-1)}] [{4*off}-{4*(off+count-1)}]\n";
 			off += count
 		return off, pad_string
 
@@ -247,7 +262,7 @@ class CBufferGen:
 						if l.cb_pad_string:
 							f.write(l.cb_pad_string)
 						n = f"{l.name};"
-						f.write(f"\t{l.hlsl_cb_type:<40} {n:<40}//[{offset}-{offset+l.cb_size-1}] [{offset*4}-{4*(offset+l.cb_size-1)}]\n")
+						f.write(f"\t{l.hlsl_cb_type:<50} {n:<40}//[{offset}-{offset+l.cb_size-1}] [{offset*4}-{4*(offset+l.cb_size-1)}]\n")
 						offset += l.cb_size
 					f.write(f"}}; // struct size:{offset}\n")
 
@@ -301,17 +316,17 @@ class CBufferGen:
 				if l.cb_align == 4:
 					padded_offset, pad_string = A.Pad2(offset, 4)
 					offset = padded_offset
-				elif l.is_vector:
+				else:
 					if l.cb_size > 1 and (offset % 4) + l.cb_size > 4:
 						padded_offset, pad_string = A.Pad2(offset, 4)
 						offset = padded_offset
-				else:
-					pass
 				l.cb_offset = offset
 				l.cb_pad_string = pad_string
 				if l.cb_size == DELAYED_STRUCT_SIZE:
 					decl_struct = A.all_structs[l.type]
 					l.cb_size = decl_struct.cb_size
+					if l.array_size:
+						l.cb_size = GetArraySize(l.cb_size, l.array_size)
 					if decl_struct.cb_size == DELAYED_STRUCT_SIZE:
 						print(f"struct size for {l.type} unresolved")
 						exit(1)
