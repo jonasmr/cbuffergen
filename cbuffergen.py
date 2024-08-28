@@ -168,15 +168,6 @@ class CBufferGen:
 			output_lines.append(l)
 		return output_lines
 
-	# def Pad(A, offset, target, f):
-	# 	off = offset
-	# 	if (off%target) != 0:
-	# 		count = 4 - (off%target)
-	# 		pad_type = f"hlsl_int{count}" 
-	# 		name = f"__pad{off};"
-	# 		f.write(f"\t{pad_type:<40} {name:<40}//[{off}-{(off+count-1)}] [{4*off}-{4*(off+count-1)}]\n");
-	# 		off += count
-	# 	return off
 		
 	def Pad2(A, offset, target):
 		off = offset
@@ -189,9 +180,9 @@ class CBufferGen:
 			pad_type = f"hlsl_int{count}" 
 			name = f"__pad{int(off/4)};"
 			s1 = int(off/4)
-			s2 = int((off+count)/4-1)
+			s2 = int((off+count_bytes-1)/4)
 			s3 = off
-			s4 = (off+count-4)
+			s4 = (off+count_bytes-4)
 
 			pad_string = f"\t{pad_type:<50} {name:<40}//[{s1}-{s2}] [{s3}-{s4}]\n";
 			off += count_bytes
