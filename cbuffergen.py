@@ -12,10 +12,6 @@ from io import StringIO
 from enum import Enum
 #
 # TODO
-#  typedef only supports size==4b
-#  typedef does not support arrays
-#  structs does not support arrays
-#  structs only support structs from the same file
 #  size calcs are in dwords, so no support for double, uint16_t
 
 DELAYED_STRUCT_SIZE = -42
@@ -26,12 +22,18 @@ class TypeClass(Enum):
 
 # name/size pairs of all typedefs
 Typedefs = {
-	"PalDescriptorHandle":1
+	"PalDescriptorHandle":4
 }
 
+for t in Typedefs:
+	assert (Typedefs[t] % 4) == 0
+
+def GetAlignedArrayElementSize(size):
+	#each array element should be 16b aligned 
+	return 16 * ((size + 15) / 16)
 
 def GetArraySize(size, array_size):
-	total_size = (array_size-1) * (4*(size+3)/4) + size
+	total_size = (array_size-1) * GetAlignedArrayElementSize(size) + size
 	return int(total_size)
 
 class Line:
@@ -58,44 +60,42 @@ class Line:
 			L.is_matrix = False
 			L.is_vector = False
 
-		L.cb_align = 1
+		L.cb_align = 4
 		if L.type_class == TypeClass.BUILTIN:
 			if L.is_matrix:
-				L.cb_align = 4
+				L.cb_align = 16
 				if L.array_size:
 					padded_mat_size = L.hlsl_size * 4 * L.dim_y
 					last_mat_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
 					L.cb_size = padded_mat_size * (L.array_size-1) + last_mat_size
 				else:
 					L.cb_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
-			elif L.is_vector:
-				if L.array_size:
-					L.cb_align = 4
-					L.cb_size = L.hlsl_size * ((4 * (L.array_size-1)) + L.dim_x)
-				else:
-					L.cb_size = L.hlsl_size * L.dim_x
 
-			if L.is_matrix:
 				L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
 				if array_size:
 					L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cb_array({L.array_ext_cb})"
 				else:
 					L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cb"
-					
+
+
 			elif L.is_vector:
+				if L.array_size:
+					L.cb_align = 16
+					L.cb_size = L.hlsl_size * ((4 * (L.array_size-1)) + L.dim_x)
+				else:
+					L.cb_size = L.hlsl_size * L.dim_x
 				L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
 				if L.array_size:
 					L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}_cb_array({L.array_ext_cb})"
 				else:
 					L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
 
-
 		elif L.type_class == TypeClass.STRUCT:
 			if L.is_matrix or L.is_vector:
 				print(f"matrix/vector structs not supported")
 				exit(1)
 			L.cb_size = L.hlsl_size
-			L.cb_align = 4
+			L.cb_align = 16
 			L.hlsl_type = f"{L.hlsl_base_type}"
 			if L.array_size > 0:
 				L.hlsl_cb_type = f"hlsl_any_array_cb<{L.hlsl_base_type}_cb, {L.array_size}>"
@@ -105,7 +105,7 @@ class Line:
 		elif L.type_class == TypeClass.TYPEDEF:
 			if L.array_size:
 				L.cb_size = GetArraySize(L.hlsl_size, L.array_size) # L.hlsl_size + (L.array_size-1) * 4
-				L.cb_align = 4
+				L.cb_align = 16
 			else:
 				L.cb_size = L.hlsl_size
 
@@ -118,6 +118,8 @@ class Line:
 		else:
 			print(f"unknown typeclass {L.type_class}")
 			exit(1)
+
+
 
 
 class CBufferGenStruct:
@@ -166,25 +168,33 @@ class CBufferGen:
 			output_lines.append(l)
 		return output_lines
 
-	def Pad(A, offset, target, f):
-		off = offset
-		if (off%target) != 0:
-			count = 4 - (off%target)
-			pad_type = f"hlsl_int{count}" 
-			name = f"__pad{off};"
-			f.write(f"\t{pad_type:<40} {name:<40}//[{off}-{(off+count-1)}] [{4*off}-{4*(off+count-1)}]\n");
-			off += count
-		return off
+	# def Pad(A, offset, target, f):
+	# 	off = offset
+	# 	if (off%target) != 0:
+	# 		count = 4 - (off%target)
+	# 		pad_type = f"hlsl_int{count}" 
+	# 		name = f"__pad{off};"
+	# 		f.write(f"\t{pad_type:<40} {name:<40}//[{off}-{(off+count-1)}] [{4*off}-{4*(off+count-1)}]\n");
+	# 		off += count
+	# 	return off
 		
 	def Pad2(A, offset, target):
 		off = offset
 		pad_string = ""
 		if (off%target) != 0:
-			count = 4 - (off%target)
+			count_bytes = 16 - (off%target)
+			assert (count_bytes % 4) == 0
+			count = int(count_bytes / 4)
+
 			pad_type = f"hlsl_int{count}" 
-			name = f"__pad{off};"
-			pad_string = f"\t{pad_type:<50} {name:<40}//[{off}-{(off+count-1)}] [{4*off}-{4*(off+count-1)}]\n";
-			off += count
+			name = f"__pad{int(off/4)};"
+			s1 = int(off/4)
+			s2 = int((off+count)/4-1)
+			s3 = off
+			s4 = (off+count-4)
+
+			pad_string = f"\t{pad_type:<50} {name:<40}//[{s1}-{s2}] [{s3}-{s4}]\n";
+			off += count_bytes
 		return off, pad_string
 
 	def Parse2(A, file_content, out_file, out_globals_file):
@@ -262,7 +272,11 @@ class CBufferGen:
 						if l.cb_pad_string:
 							f.write(l.cb_pad_string)
 						n = f"{l.name};"
-						f.write(f"\t{l.hlsl_cb_type:<50} {n:<40}//[{offset}-{offset+l.cb_size-1}] [{offset*4}-{4*(offset+l.cb_size-1)}]\n")
+						s1 = int(offset/4)
+						s2 = int((offset+l.cb_size)/4-1)
+						s3 = offset
+						s4 = (offset+l.cb_size-4)
+						f.write(f"\t{l.hlsl_cb_type:<50} {n:<40}//[{s1}-{s2}] [{s3}-{s4}]\n")
 						offset += l.cb_size
 					f.write(f"}}; // struct size:{offset}\n")
 
@@ -313,12 +327,12 @@ class CBufferGen:
 				output_type = l.hlsl_type
 				offset_before = offset
 				pad_string = ""
-				if l.cb_align == 4:
-					padded_offset, pad_string = A.Pad2(offset, 4)
+				if l.cb_align == 16:
+					padded_offset, pad_string = A.Pad2(offset, 16)
 					offset = padded_offset
 				else:
-					if l.cb_size > 1 and (offset % 4) + l.cb_size > 4:
-						padded_offset, pad_string = A.Pad2(offset, 4)
+					if l.cb_size > 1 and (offset % 16) + l.cb_size > 16:
+						padded_offset, pad_string = A.Pad2(offset, 16)
 						offset = padded_offset
 				l.cb_offset = offset
 				l.cb_pad_string = pad_string
@@ -346,7 +360,7 @@ class CBufferGen:
 		type_name = "?"
 		dim_x = 0
 		dim_y = 0
-		size = 1
+		size = 4
 		type_class = TypeClass.BUILTIN
 		external = 0
 		if match:
