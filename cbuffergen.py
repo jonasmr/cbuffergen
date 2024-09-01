@@ -63,14 +63,10 @@ class Line:
 
 		L.cb_align = L.hlsl_size
 		if L.type_class == TypeClass.BUILTIN:
+			vector_size = L.dim_x * L.hlsl_size
 			if L.is_matrix:
 				L.cb_align = 16
-				vector_size = L.dim_x * L.hlsl_size
-#				mat_size = 16 * (L.dim_y-1) + L.dim_x * L.hlsl_size
-#				padded_mat_size = 16 * L.dim_y
 				if L.array_size:
-					#padded_mat_size = 16 * L.dim_y
-					#last_mat_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
 					L.cb_size = GetArraySize(vector_size, L.dim_y * L.array_size) #padded_mat_size * (L.array_size-1) + mat_size
 				else:
 					L.cb_size = GetArraySize(vector_size, L.dim_y)
@@ -84,9 +80,9 @@ class Line:
 			elif L.is_vector:
 				if L.array_size:
 					L.cb_align = 16
-					L.cb_size = L.hlsl_size * L.dim_x + (16 * (L.array_size-1)) #L.hlsl_size * ((4 * (L.array_size-1)) + L.dim_x)
+					L.cb_size = GetArraySize(vector_size, L.array_size) #L.hlsl_size * L.dim_x + (16 * (L.array_size-1)) #L.hlsl_size * ((4 * (L.array_size-1)) + L.dim_x)
 				else:
-					L.cb_size = L.hlsl_size * L.dim_x
+					L.cb_size = vector_size
 				L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
 				if L.array_size:
 					L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}_cb_array({L.array_ext_cb})"
@@ -176,18 +172,25 @@ class CBufferGen:
 		off = offset
 		pad_string = ""
 		if (off%target) != 0:
-			count_bytes = 16 - (off%target)
-			assert (count_bytes % 4) == 0
-			count = int(count_bytes / 4)
+			aligned = target * (math.floor((off + target - 1) / target))
+			count_bytes = aligned - off #16 - (off%target)
+			shorts = count_bytes % 4
+			if shorts > 0:
+				assert shorts == 2
+				count = int(count_bytes / 2)
+				pad_type = f"hlsl_uint16_t{count}" 
+				name = f"__pad{int(off)};"
+				s3 = off
+				s4 = (off+count_bytes)
+				pad_string = f"\t{pad_type:<50} {name:<40}//[{s3}-{s4}]\n";
 
-			pad_type = f"hlsl_int{count}" 
-			name = f"__pad{int(off/4)};"
-			s1 = int(off/4)
-			s2 = int((off+count_bytes-1)/4)
-			s3 = off
-			s4 = (off+count_bytes-4)
-
-			pad_string = f"\t{pad_type:<50} {name:<40}//[{s1}-{s2}] [{s3}-{s4}]\n";
+			else:
+				count = int(count_bytes / 4)
+				pad_type = f"hlsl_int{count}" 
+				name = f"__pad{int(off)};"
+				s3 = off
+				s4 = (off+count_bytes)
+				pad_string = f"\t{pad_type:<50} {name:<40}//[{s3}-{s4}]\n";
 			off += count_bytes
 		return off, pad_string
 
@@ -266,11 +269,9 @@ class CBufferGen:
 						if l.cb_pad_string:
 							f.write(l.cb_pad_string)
 						n = f"{l.name};"
-						s1 = int(offset/4)
-						s2 = int((offset+l.cb_size)/4-1)
 						s3 = offset
-						s4 = (offset+l.cb_size-4)
-						f.write(f"\t{l.hlsl_cb_type:<50} {n:<40}//[{s1}-{s2}] [{s3}-{s4}]\n")
+						s4 = (offset+l.cb_size)
+						f.write(f"\t{l.hlsl_cb_type:<50} {n:<40}//[{s3}-{s4}]\n")
 						offset += l.cb_size
 					f.write(f"}}; // struct size:{offset}\n")
 
