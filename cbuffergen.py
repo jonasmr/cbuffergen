@@ -7,6 +7,7 @@ import time
 import shlex
 import json
 import argparse
+import math
 
 from io import StringIO
 from enum import Enum
@@ -30,7 +31,7 @@ for t in Typedefs:
 
 def GetAlignedArrayElementSize(size):
 	#each array element should be 16b aligned 
-	return 16 * ((size + 15) / 16)
+	return 16 * (math.floor((size + 15) / 16))
 
 def GetArraySize(size, array_size):
 	total_size = (array_size-1) * GetAlignedArrayElementSize(size) + size
@@ -60,16 +61,19 @@ class Line:
 			L.is_matrix = False
 			L.is_vector = False
 
-		L.cb_align = 4
+		L.cb_align = L.hlsl_size
 		if L.type_class == TypeClass.BUILTIN:
 			if L.is_matrix:
 				L.cb_align = 16
+				vector_size = L.dim_x * L.hlsl_size
+#				mat_size = 16 * (L.dim_y-1) + L.dim_x * L.hlsl_size
+#				padded_mat_size = 16 * L.dim_y
 				if L.array_size:
-					padded_mat_size = L.hlsl_size * 4 * L.dim_y
-					last_mat_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
-					L.cb_size = padded_mat_size * (L.array_size-1) + last_mat_size
+					#padded_mat_size = 16 * L.dim_y
+					#last_mat_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
+					L.cb_size = GetArraySize(vector_size, L.dim_y * L.array_size) #padded_mat_size * (L.array_size-1) + mat_size
 				else:
-					L.cb_size = L.hlsl_size * (4 * (L.dim_y-1) + L.dim_x)
+					L.cb_size = GetArraySize(vector_size, L.dim_y)
 
 				L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}"
 				if array_size:
@@ -77,11 +81,10 @@ class Line:
 				else:
 					L.hlsl_cb_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}x{L.dim_y}_cb"
 
-
 			elif L.is_vector:
 				if L.array_size:
 					L.cb_align = 16
-					L.cb_size = L.hlsl_size * ((4 * (L.array_size-1)) + L.dim_x)
+					L.cb_size = L.hlsl_size * L.dim_x + (16 * (L.array_size-1)) #L.hlsl_size * ((4 * (L.array_size-1)) + L.dim_x)
 				else:
 					L.cb_size = L.hlsl_size * L.dim_x
 				L.hlsl_type = f"hlsl_{L.hlsl_base_type}{L.dim_x}"
@@ -188,7 +191,7 @@ class CBufferGen:
 			off += count_bytes
 		return off, pad_string
 
-	def Parse2(A, file_content, out_file, out_globals_file):
+	def Parse(A, file_content, out_file, out_globals_file):
 		
 		File = CBufferGenFile()
 		File.out_file = out_file
@@ -322,9 +325,16 @@ class CBufferGen:
 					padded_offset, pad_string = A.Pad2(offset, 16)
 					offset = padded_offset
 				else:
-					if l.cb_size > 1 and (offset % 16) + l.cb_size > 16:
+					if (offset % 16) + l.cb_size > 16:
 						padded_offset, pad_string = A.Pad2(offset, 16)
 						offset = padded_offset
+					elif l.cb_align == 2:
+						assert (offset % 2) == 0
+					elif l.cb_align == 8:
+						padded_offset, pad_string = A.Pad2(offset, 8)
+						offset = padded_offset
+
+					
 				l.cb_offset = offset
 				l.cb_pad_string = pad_string
 				if l.cb_size == DELAYED_STRUCT_SIZE:
@@ -346,7 +356,7 @@ class CBufferGen:
 
 
 	def MapType(A, type):
-		type_pattern = r'(float|int|uint|bool)(([1-4])(x([1-4]))?)?';
+		type_pattern = r'(float|int|uint|bool|uint16_t|double)(([1-4])(x([1-4]))?)?';
 		match = re.match(type_pattern, type)
 		type_name = "?"
 		dim_x = 0
@@ -357,6 +367,10 @@ class CBufferGen:
 		if match:
 			#builtin or array type
 			type_name = f'{match.group(1)}'
+			if "uint16_t" in type_name:
+				size = 2
+			elif "double" in type_name:
+				size = 8
 			if match.group(5):
 				dim_x = int(match.group(3))
 				dim_y = int(match.group(5))
@@ -424,7 +438,7 @@ class CBufferGen:
 				output_globals_file = ""
 				if A.args.global_path:
 					output_globals_file = f"{A.args.global_path}/{filename[:-2]}.globals.hlsl"
-					A.Parse2(file_string, output_file, output_globals_file)
+					A.Parse(file_string, output_file, output_globals_file)
 		A.CalcSizes()
 		A.WriteFiles()
 
