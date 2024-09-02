@@ -174,23 +174,32 @@ class CBufferGen:
 		if (off%target) != 0:
 			aligned = target * (math.floor((off + target - 1) / target))
 			count_bytes = aligned - off #16 - (off%target)
-			shorts = count_bytes % 4
-			if shorts > 0:
-				assert shorts == 2
-				count = int(count_bytes / 2)
-				pad_type = f"hlsl_uint16_t{count}" 
-				name = f"__pad{int(off)};"
-				s3 = off
-				s4 = (off+count_bytes)
-				pad_string = f"\t{pad_type:<50} {name:<40}//[{s3}-{s4}]\n";
+			assert count_bytes % 2 == 0
+			shorts = math.floor(count_bytes / 2)
+			pad_type = f"hlsl_uint16_t" 
+			name = f"__pad{int(off)}[{int(shorts)}];"
+			s3 = off
+			s4 = (off+count_bytes)
+			pad_string = f"\t{pad_type:<50} {name:<40}//[{s3}-{s4}]\n";
 
-			else:
-				count = int(count_bytes / 4)
-				pad_type = f"hlsl_int{count}" 
-				name = f"__pad{int(off)};"
-				s3 = off
-				s4 = (off+count_bytes)
-				pad_string = f"\t{pad_type:<50} {name:<40}//[{s3}-{s4}]\n";
+
+			# shorts = count_bytes % 4
+			# if shorts > 0:
+			# 	assert shorts == 2
+			# 	count = int(count_bytes / 2)
+			# 	pad_type = f"hlsl_uint16_t{count}" 
+			# 	name = f"__pad{int(off)};"
+			# 	s3 = off
+			# 	s4 = (off+count_bytes)
+			# 	pad_string = f"\t{pad_type:<50} {name:<40}//[{s3}-{s4}]\n";
+
+			# else:
+			# 	count = int(count_bytes / 4)
+			# 	pad_type = f"hlsl_int{count}" 
+			# 	name = f"__pad{int(off)};"
+			# 	s3 = off
+			# 	s4 = (off+count_bytes)
+			# 	pad_string = f"\t{pad_type:<50} {name:<40}//[{s3}-{s4}]\n";
 			off += count_bytes
 		return off, pad_string
 
@@ -357,7 +366,7 @@ class CBufferGen:
 
 
 	def MapType(A, type):
-		type_pattern = r'(float|int|uint|bool|uint16_t|double)(([1-4])(x([1-4]))?)?';
+		type_pattern = r'(uint16_t|float|int|uint|bool|double)(([1-4])(x([1-4]))?)?';
 		match = re.match(type_pattern, type)
 		type_name = "?"
 		dim_x = 0
